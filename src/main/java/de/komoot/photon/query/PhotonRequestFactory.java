@@ -1,5 +1,6 @@
 package de.komoot.photon.query;
 
+import de.komoot.photon.StructuredPhotonRequest;
 import de.komoot.photon.searcher.TagFilter;
 import spark.QueryParamsMap;
 import spark.Request;
@@ -20,10 +21,63 @@ public class PhotonRequestFactory {
     private static final HashSet<String> REQUEST_QUERY_PARAMS = new HashSet<>(Arrays.asList("lang", "q", "lon", "lat",
             "limit", "osm_tag", "location_bias_scale", "bbox", "debug", "zoom", "layer"));
 
+    private static final HashSet<String> STRUCTURED_REQUEST_QUERY_PARAMS = new HashSet<>(Arrays.asList("lang", "countrycode", "state", "county", "city",
+            "limit", "postcode", "district", "housenumber", "street", "zoom", "layer"));
+
+
     public PhotonRequestFactory(List<String> supportedLanguages, String defaultLanguage) {
         this.languageResolver = new RequestLanguageResolver(supportedLanguages, defaultLanguage);
         this.bboxParamConverter = new BoundingBoxParamConverter();
         this.layerParamValidator = new LayerParamValidator();
+    }
+
+    public StructuredPhotonRequest createStructured(Request webRequest) throws BadRequestException {
+        for (String queryParam : webRequest.queryParams())
+            if (!STRUCTURED_REQUEST_QUERY_PARAMS.contains(queryParam))
+                throw new BadRequestException(400, "unknown query parameter '" + queryParam + "'.  Allowed parameters are: " + STRUCTURED_REQUEST_QUERY_PARAMS);
+
+
+        StructuredPhotonRequest result = new StructuredPhotonRequest(languageResolver.resolveRequestedLanguage(webRequest));
+        result.setCountryCode(webRequest.queryParams("countrycode"));
+        result.setState(webRequest.queryParams("state"));
+        result.setCounty(webRequest.queryParams("county"));
+        result.setCity(webRequest.queryParams("city"));
+        result.setPostCode(webRequest.queryParams("postcode"));
+        result.setDistrict(webRequest.queryParams("district"));
+        result.setStreet(webRequest.queryParams("street"));
+        result.setHouseNumber(webRequest.queryParams("housenumber"));
+        result.setLimit(parseInt(webRequest, "limit"));
+        return result;
+        /*
+        PhotonRequest request = new PhotonRequest(query, languageResolver.resolveRequestedLanguage(webRequest));
+
+        request.setLimit(parseInt(webRequest, "limit"));
+        request.setLocationForBias(optionalLocationParamConverter.apply(webRequest));
+        request.setBbox(bboxParamConverter.apply(webRequest));
+        request.setScale(parseDouble(webRequest, "location_bias_scale"));
+        request.setZoom(parseInt(webRequest, "zoom"));
+
+        if (webRequest.queryParams("debug") != null) {
+            request.enableDebug();
+        }
+
+        QueryParamsMap tagFiltersQueryMap = webRequest.queryMap("osm_tag");
+        if (tagFiltersQueryMap.hasValue()) {
+            for (String filter : tagFiltersQueryMap.values()) {
+                TagFilter tagFilter = TagFilter.buildOsmTagFilter(filter);
+                if (tagFilter == null) {
+                    throw new BadRequestException(400, String.format("Invalid parameter 'osm_tag=%s': bad syntax for tag filter.", filter));
+                }
+                request.addOsmTagFilter(TagFilter.buildOsmTagFilter(filter));
+            }
+        }
+
+        QueryParamsMap layerFiltersQueryMap = webRequest.queryMap("layer");
+        if (layerFiltersQueryMap.hasValue()) {
+            request.setLayerFilter(layerParamValidator.validate(layerFiltersQueryMap.values()));
+        }
+
+        return request;*/
     }
 
     public PhotonRequest create(Request webRequest) throws BadRequestException {

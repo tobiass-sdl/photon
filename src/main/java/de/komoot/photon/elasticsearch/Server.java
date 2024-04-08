@@ -5,6 +5,7 @@ import de.komoot.photon.Importer;
 import de.komoot.photon.Updater;
 import de.komoot.photon.searcher.ReverseHandler;
 import de.komoot.photon.searcher.SearchHandler;
+import de.komoot.photon.searcher.StructuredSearchHandler;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
@@ -281,6 +282,10 @@ public class Server {
 
     public SearchHandler createSearchHandler(String[] languages, int queryTimeoutSec) {
         return new ElasticsearchSearchHandler(esClient, languages, queryTimeoutSec);
+    }
+
+    public StructuredSearchHandler createStructuredSearchHandler(String[] languages, int queryTimeoutSec) {
+        return new ElasticsearchStructuredSearchHandler(esClient, languages, queryTimeoutSec);
     }
 
     public ReverseHandler createReverseHandler(int queryTimeoutSec) {

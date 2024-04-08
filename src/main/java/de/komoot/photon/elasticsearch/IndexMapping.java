@@ -39,7 +39,7 @@ public class IndexMapping {
 
     public IndexMapping addLanguages(String[] languages) {
         // define collector json strings
-        String copyToCollectorString = "{\"type\":\"text\",\"index\":false,\"copy_to\":[\"collector.{lang}\"]}";
+        String copyToCollectorString = "{\"type\":\"text\",\"index\":true,\"copy_to\":[\"collector.{lang}\"]}";
         String nameToCollectorString = "{\"type\":\"text\",\"index\":false,\"fields\":{\"ngrams\":{\"type\":\"text\",\"analyzer\":\"index_ngram\"},\"raw\":{\"type\":\"text\",\"analyzer\":\"index_raw\",\"search_analyzer\":\"search_raw\"}},\"copy_to\":[\"collector.{lang}\"]}";
         String collectorString = "{\"type\":\"text\",\"index\":false,\"fields\":{\"ngrams\":{\"type\":\"text\",\"analyzer\":\"index_ngram\"},\"raw\":{\"type\":\"text\",\"analyzer\":\"index_raw\",\"search_analyzer\":\"search_raw\"}},\"copy_to\":[\"collector.{lang}\"]}";
 
