@@ -10,6 +10,9 @@ import java.io.File;
  */
 public class CommandLineArgs {
 
+    @Parameter(names = "-structured", description = "Enable support for structured queries")
+    private boolean supportStructuredQueries = false;
+
     @Parameter(names = "-cluster", description = "Name of ElasticSearch cluster to put the server into")
     private String cluster = "photon";
 
@@ -185,5 +188,7 @@ public class CommandLineArgs {
     public boolean isUsage() {
         return this.usage;
     }
+
+    public boolean getSupportStructuredQueries() { return supportStructuredQueries; }
 }
 

@@ -16,6 +16,7 @@ public class IndexMapping {
     private static final Logger LOGGER = org.slf4j.LoggerFactory.getLogger(IndexMapping.class);
 
     private final JSONObject mappings;
+    private boolean supportStructuredQueries;
 
     /**
      * Create a new settings object and initialize it with the index settings
@@ -36,10 +37,36 @@ public class IndexMapping {
                 .actionGet();
     }
 
+    public IndexMapping addStructuredQuerySupport()
+    {
+        this.supportStructuredQueries = true;
+        JSONObject placeObject = mappings.optJSONObject("place");
+        JSONObject propertiesObject = placeObject == null ? null : placeObject.optJSONObject("properties");
+
+        if(propertiesObject == null)
+        {
+            LOGGER.error("Cannot set index=true to mapping.json, please double-check the mappings.json");
+            return this;
+        }
+
+        String[] fieldsToIndex = new String[]{ "countrycode", "state", "county", "city", "postcode", "district", "housenumber", "street" };
+
+        for(String fieldname : fieldsToIndex)
+        {
+            JSONObject fieldObject = propertiesObject.optJSONObject(fieldname);
+            if(!fieldObject.has("index")) {
+                fieldObject = fieldObject.getJSONObject("properties").getJSONObject("default");
+            }
+
+            fieldObject.put("index", true);
+        }
+
+        return this;
+    }
 
     public IndexMapping addLanguages(String[] languages) {
         // define collector json strings
-        String copyToCollectorString = "{\"type\":\"text\",\"index\":false,\"copy_to\":[\"collector.{lang}\"]}";
+        String copyToCollectorString = "{\"type\":\"text\",\"index\":" + supportStructuredQueries + ",\"copy_to\":[\"collector.{lang}\"]}";
         String nameToCollectorString = "{\"type\":\"text\",\"index\":false,\"fields\":{\"ngrams\":{\"type\":\"text\",\"analyzer\":\"index_ngram\"},\"raw\":{\"type\":\"text\",\"analyzer\":\"index_raw\",\"search_analyzer\":\"search_raw\"}},\"copy_to\":[\"collector.{lang}\"]}";
         String collectorString = "{\"type\":\"text\",\"index\":false,\"fields\":{\"ngrams\":{\"type\":\"text\",\"analyzer\":\"index_ngram\"},\"raw\":{\"type\":\"text\",\"analyzer\":\"index_raw\",\"search_analyzer\":\"search_raw\"}},\"copy_to\":[\"collector.{lang}\"]}";
 

@@ -15,6 +15,8 @@ public class DatabaseProperties {
      */
     private Date importDate;
 
+    private boolean supportStructuredQueries;
+
     /**
      * Return the list of languages for which the database is configured.
      * @return
@@ -76,6 +78,15 @@ public class DatabaseProperties {
 
     public DatabaseProperties setImportDate(Date importDate) {
         this.importDate = importDate;
+        return this;
+    }
+
+    public boolean getSupportStructuredQueries() {
+        return supportStructuredQueries;
+    }
+
+    public DatabaseProperties setSupportStructuredQueries(boolean supportStructuredQueries) {
+        this.supportStructuredQueries = supportStructuredQueries;
         return this;
     }
 }

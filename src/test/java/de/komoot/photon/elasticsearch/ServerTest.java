@@ -19,6 +19,7 @@ class ServerTest extends ESBaseTester {
         prop.setLanguages(new String[]{"en", "de", "fr"});
         Date now = new Date();
         prop.setImportDate(now);
+        prop.setSupportStructuredQueries(true);
         getServer().saveToDatabase(prop);
 
         prop = new DatabaseProperties();
@@ -26,6 +27,6 @@ class ServerTest extends ESBaseTester {
 
         assertArrayEquals(new String[]{"en", "de", "fr"}, prop.getLanguages());
         assertEquals(now, prop.getImportDate());
-
+        assertTrue(prop.getSupportStructuredQueries());
     }
 }
