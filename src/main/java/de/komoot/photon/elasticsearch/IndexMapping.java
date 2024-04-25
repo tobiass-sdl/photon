@@ -30,6 +30,8 @@ public class IndexMapping {
     }
 
     public void putMapping(Client client, String indexName, String indexType) {
+
+        System.out.println(mappings.toString());
         client.admin().indices().preparePutMapping(indexName)
                 .setType(indexType)
                 .setSource(mappings.toString(), XContentType.JSON)
@@ -37,9 +39,12 @@ public class IndexMapping {
                 .actionGet();
     }
 
-    public IndexMapping addStructuredQuerySupport()
+    public IndexMapping addStructuredQuerySupport(boolean supportStructuredQueries)
     {
-        this.supportStructuredQueries = true;
+
+        this.supportStructuredQueries = supportStructuredQueries;
+        if(!supportStructuredQueries) return this;
+
         JSONObject placeObject = mappings.optJSONObject("place");
         JSONObject propertiesObject = placeObject == null ? null : placeObject.optJSONObject("properties");
 
@@ -49,7 +54,7 @@ public class IndexMapping {
             return this;
         }
 
-        String[] fieldsToIndex = new String[]{ "countrycode", "state", "county", "city", "postcode", "district", "housenumber", "street" };
+        String[] fieldsToIndex = new String[]{ "countrycode", "state", "county", "city", "postcode", "district", "housenumber", "street", "name" };
 
         for(String fieldname : fieldsToIndex)
         {
@@ -66,8 +71,8 @@ public class IndexMapping {
 
     public IndexMapping addLanguages(String[] languages) {
         // define collector json strings
-        String copyToCollectorString = "{\"type\":\"text\",\"index\":" + supportStructuredQueries + ",\"copy_to\":[\"collector.{lang}\"]}";
-        String nameToCollectorString = "{\"type\":\"text\",\"index\":false,\"fields\":{\"ngrams\":{\"type\":\"text\",\"analyzer\":\"index_ngram\"},\"raw\":{\"type\":\"text\",\"analyzer\":\"index_raw\",\"search_analyzer\":\"search_raw\"}},\"copy_to\":[\"collector.{lang}\"]}";
+        String copyToCollectorString = "{\"type\":\"text\",\"index\":" + this.supportStructuredQueries + ",\"copy_to\":[\"collector.{lang}\"]}";
+        String nameToCollectorString = "{\"type\":\"text\",\"index\":" + this.supportStructuredQueries + ",\"fields\":{\"ngrams\":{\"type\":\"text\",\"analyzer\":\"index_ngram\"},\"raw\":{\"type\":\"text\",\"analyzer\":\"index_raw\",\"search_analyzer\":\"search_raw\"}},\"copy_to\":[\"collector.{lang}\"]}";
         String collectorString = "{\"type\":\"text\",\"index\":false,\"fields\":{\"ngrams\":{\"type\":\"text\",\"analyzer\":\"index_ngram\"},\"raw\":{\"type\":\"text\",\"analyzer\":\"index_raw\",\"search_analyzer\":\"search_raw\"}},\"copy_to\":[\"collector.{lang}\"]}";
 
         JSONObject placeObject = mappings.optJSONObject("place");

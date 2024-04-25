@@ -194,13 +194,9 @@ public class Server {
 
     private void createAndPutIndexMapping(String[] languages, boolean supportStructuredQueries)
     {
-        IndexMapping result = new IndexMapping().addLanguages(languages);
-        if(supportStructuredQueries)
-        {
-            result = result.addStructuredQuerySupport();
-        }
-
-        result.putMapping(esClient, PhotonIndex.NAME, PhotonIndex.TYPE);
+        new IndexMapping().addStructuredQuerySupport(supportStructuredQueries)
+                          .addLanguages(languages)
+                          .putMapping(esClient, PhotonIndex.NAME, PhotonIndex.TYPE);
     }
 
     public void updateIndexSettings(String synonymFile) throws IOException {

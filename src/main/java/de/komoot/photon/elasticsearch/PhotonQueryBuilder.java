@@ -3,6 +3,7 @@ package de.komoot.photon.elasticsearch;
 
 import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.Point;
+import de.komoot.photon.StructuredPhotonRequest;
 import de.komoot.photon.searcher.TagFilter;
 import org.elasticsearch.common.lucene.search.function.CombineFunction;
 import org.elasticsearch.common.lucene.search.function.FiltersFunctionScoreQuery.ScoreMode;
@@ -125,6 +126,22 @@ public class PhotonQueryBuilder {
 
         osmTagFilter = new OsmTagFilter();
         
+        state = State.PLAIN;
+    }
+
+    private PhotonQueryBuilder(StructuredPhotonRequest request, String[] languages, boolean lenient)
+    {
+        final double StateBoost = 1.0;
+        final double CountyBoost = 1.0;
+        final double CityBoost = 1.0;
+        final double PostalCodeBoost = 1.0;
+        final double DistrictBoost = 1.0;
+        final double StreetBoost = 1.0;
+        final double HouseNumberBoost = 1.0;
+
+        finalQueryWithoutTagFilterBuilder =null;
+        queryBuilderForTopLevelFilter = null;
+        osmTagFilter = new OsmTagFilter();
         state = State.PLAIN;
     }
 
