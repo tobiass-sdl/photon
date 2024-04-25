@@ -3,9 +3,11 @@ package de.komoot.photon.elasticsearch;
 
 import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.Point;
+import de.komoot.photon.Constants;
 import de.komoot.photon.StructuredPhotonRequest;
 import de.komoot.photon.searcher.TagFilter;
 import org.elasticsearch.common.lucene.search.function.CombineFunction;
+import org.elasticsearch.common.lucene.search.function.FiltersFunctionScoreQuery;
 import org.elasticsearch.common.lucene.search.function.FiltersFunctionScoreQuery.ScoreMode;
 import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.index.query.*;
@@ -129,22 +131,35 @@ public class PhotonQueryBuilder {
         state = State.PLAIN;
     }
 
-    private PhotonQueryBuilder(StructuredPhotonRequest request, String[] languages, boolean lenient)
+    private PhotonQueryBuilder(StructuredPhotonRequest request, String language, String[] languages, boolean lenient)
     {
-        final double StateBoost = 1.0;
-        final double CountyBoost = 1.0;
-        final double CityBoost = 1.0;
-        final double PostalCodeBoost = 1.0;
-        final double DistrictBoost = 1.0;
-        final double StreetBoost = 1.0;
-        final double HouseNumberBoost = 1.0;
+        QueryBuilder query4QueryBuilder = new AddressQueryBuilder(lenient, language, languages)
+                .addCountryCode(request.getCountryCode())
+                .addState(request.getState(), request.hasCounty() || request.hasCityOrPostcode())
+                .addCounty(request.getCounty(), request.hasCityOrPostcode())
+                .addCity(request.getCity(), request.hasDistrict(), request.hasStreet())
+                .addPostalCode(request.getPostCode())
+                .addDistrict(request.getDistrict(), request.hasStreet())
+                .addStreet(request.getStreet(), request.hasHouseNumber())
+                .addHouseNumber(request.getHouseNumber())
+                .getQuery();
 
-        finalQueryWithoutTagFilterBuilder =null;
-        queryBuilderForTopLevelFilter = null;
+        finalQueryWithoutTagFilterBuilder = QueryBuilders.functionScoreQuery(query4QueryBuilder, new FunctionScoreQueryBuilder.FilterFunctionBuilder[]{
+                new FunctionScoreQueryBuilder.FilterFunctionBuilder(ScoreFunctionBuilders.linearDecayFunction("importance", "1.0", "0.6"))
+        }).scoreMode(FiltersFunctionScoreQuery.ScoreMode.SUM);
+
+        if(!request.hasHouseNumber())
+        {
+            queryBuilderForTopLevelFilter = QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(Constants.HOUSENUMBER));
+        }
+
         osmTagFilter = new OsmTagFilter();
         state = State.PLAIN;
     }
 
+    public static PhotonQueryBuilder builder(StructuredPhotonRequest request, String language, String[] languages, boolean lenient) {
+        return new PhotonQueryBuilder(request, language, languages, lenient);
+    }
 
     /**
      * Create an instance of this builder which can then be embellished as needed.
@@ -212,7 +227,14 @@ public class PhotonQueryBuilder {
     public QueryBuilder buildQuery() {
         if (state.equals(State.FINISHED)) return finalQueryBuilder;
 
-        finalQueryBuilder = QueryBuilders.boolQuery().must(finalQueryWithoutTagFilterBuilder).filter(queryBuilderForTopLevelFilter);
+        finalQueryBuilder = QueryBuilders.boolQuery().must(finalQueryWithoutTagFilterBuilder);
+        if(queryBuilderForTopLevelFilter != null)
+        {
+            finalQueryBuilder.filter(queryBuilderForTopLevelFilter);
+        }
+        else {
+            System.out.println("no filter");
+        }
 
         BoolQueryBuilder tagFilters = osmTagFilter.getTagFiltersQuery();
         if (state.equals(State.FILTERED) && tagFilters != null) {
@@ -227,6 +249,7 @@ public class PhotonQueryBuilder {
 
         state = State.FINISHED;
 
+        System.out.println(finalQueryBuilder);
         return finalQueryBuilder;
     }
 }

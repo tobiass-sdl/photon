@@ -1,7 +1,5 @@
 package de.komoot.photon;
 
-import de.komoot.photon.query.PhotonRequest;
-
 public class StructuredPhotonRequest {
     private final String language;
     private int limit = 15;
@@ -36,7 +34,6 @@ public class StructuredPhotonRequest {
             this.limit = Integer.max(Integer.min(limit, 50), 1);
         }
     }
-
 
     public String getCounty() {
         return county;
@@ -101,4 +98,14 @@ public class StructuredPhotonRequest {
     public void setState(String state) {
         this.state = state;
     }
+
+    public boolean hasDistrict() { return this.district != null; }
+
+    public boolean hasCityOrPostcode() { return this.city != null && this.postCode != null; }
+
+    public boolean hasCounty() { return this.county != null; }
+
+    public boolean hasStreet() { return this.street != null || this.houseNumber != null; }
+
+    public boolean hasHouseNumber() { return this.houseNumber != null; }
 }
