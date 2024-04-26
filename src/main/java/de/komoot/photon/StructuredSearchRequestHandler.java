@@ -1,8 +1,8 @@
 package de.komoot.photon;
 
 import de.komoot.photon.query.BadRequestException;
-import de.komoot.photon.query.PhotonRequest;
 import de.komoot.photon.query.PhotonRequestFactory;
+import de.komoot.photon.query.StructuredPhotonRequest;
 import de.komoot.photon.searcher.*;
 import org.json.JSONObject;
 import spark.Request;

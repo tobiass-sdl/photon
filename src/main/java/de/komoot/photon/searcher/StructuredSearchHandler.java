@@ -1,7 +1,6 @@
 package de.komoot.photon.searcher;
 
-import de.komoot.photon.StructuredPhotonRequest;
-import de.komoot.photon.query.PhotonRequest;
+import de.komoot.photon.query.StructuredPhotonRequest;
 
 import java.util.List;
 

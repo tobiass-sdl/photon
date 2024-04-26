@@ -1,6 +1,5 @@
 package de.komoot.photon.query;
 
-import de.komoot.photon.StructuredPhotonRequest;
 import de.komoot.photon.searcher.TagFilter;
 import spark.QueryParamsMap;
 import spark.Request;

@@ -30,7 +30,6 @@ public class AddressQueryBuilder {
 
     public AddressQueryBuilder(boolean lenient, String language, String[] languages)
     {
-        System.out.println("lenient=" + lenient);
         this.lenient = lenient;
         this.language = language;
         this.languages = languages;

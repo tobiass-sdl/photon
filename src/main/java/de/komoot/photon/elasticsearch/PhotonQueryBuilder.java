@@ -4,7 +4,7 @@ package de.komoot.photon.elasticsearch;
 import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.Point;
 import de.komoot.photon.Constants;
-import de.komoot.photon.StructuredPhotonRequest;
+import de.komoot.photon.query.StructuredPhotonRequest;
 import de.komoot.photon.searcher.TagFilter;
 import org.elasticsearch.common.lucene.search.function.CombineFunction;
 import org.elasticsearch.common.lucene.search.function.FiltersFunctionScoreQuery;
@@ -232,9 +232,6 @@ public class PhotonQueryBuilder {
         {
             finalQueryBuilder.filter(queryBuilderForTopLevelFilter);
         }
-        else {
-            System.out.println("no filter");
-        }
 
         BoolQueryBuilder tagFilters = osmTagFilter.getTagFiltersQuery();
         if (state.equals(State.FILTERED) && tagFilters != null) {
@@ -249,7 +246,6 @@ public class PhotonQueryBuilder {
 
         state = State.FINISHED;
 
-        System.out.println(finalQueryBuilder);
         return finalQueryBuilder;
     }
 }

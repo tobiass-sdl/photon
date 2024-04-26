@@ -31,7 +31,6 @@ public class IndexMapping {
 
     public void putMapping(Client client, String indexName, String indexType) {
 
-        System.out.println(mappings.toString());
         client.admin().indices().preparePutMapping(indexName)
                 .setType(indexType)
                 .setSource(mappings.toString(), XContentType.JSON)

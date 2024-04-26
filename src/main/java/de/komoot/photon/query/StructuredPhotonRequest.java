@@ -1,9 +1,6 @@
-package de.komoot.photon;
+package de.komoot.photon.query;
 
-public class StructuredPhotonRequest {
-    private final String language;
-    private int limit = 15;
-
+public class StructuredPhotonRequest extends PhotonRequestBase {
     private String countryCode;
     private String state;
     private String county;
@@ -14,25 +11,11 @@ public class StructuredPhotonRequest {
     private String houseNumber;
 
     public StructuredPhotonRequest(String language) {
-        this.language = language;
+        super(language);
     }
 
     public boolean getDebug() {
         return false;
-    }
-
-    public String getLanguage() {
-        return language;
-    }
-
-    public int getLimit() {
-        return limit;
-    }
-
-    public void setLimit(Integer limit) {
-        if (limit != null) {
-            this.limit = Integer.max(Integer.min(limit, 50), 1);
-        }
     }
 
     public String getCounty() {
