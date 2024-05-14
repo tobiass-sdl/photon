@@ -5,6 +5,7 @@ import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Point;
 import de.komoot.photon.searcher.TagFilter;
 import org.elasticsearch.common.lucene.search.function.CombineFunction;
+import org.elasticsearch.common.lucene.search.function.FiltersFunctionScoreQuery;
 import org.elasticsearch.common.lucene.search.function.FiltersFunctionScoreQuery.ScoreMode;
 import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.index.query.*;
@@ -87,7 +88,6 @@ public class PhotonQueryBuilder {
                 .type(MultiMatchQueryBuilder.Type.BEST_FIELDS)
                 .fuzziness(lenient ? Fuzziness.ONE : Fuzziness.ZERO)
                 .analyzer("search_ngram");
-
         for (String lang: languages) {
             nameNgramQuery.field(String.format("name.%s.ngrams", lang), lang.equals(defLang) ? 1.0f : 0.4f);
         }
@@ -129,6 +129,34 @@ public class PhotonQueryBuilder {
         state = State.PLAIN;
     }
 
+    private PhotonQueryBuilder(StructuredPhotonRequest request, String language, String[] languages, boolean lenient)
+    {
+        QueryBuilder query4QueryBuilder = new AddressQueryBuilder(lenient, language, languages)
+                .addCountryCode(request.getCountryCode())
+                .addState(request.getState(), request.hasCounty() || request.hasCityOrPostcode())
+                .addCounty(request.getCounty(), request.hasCityOrPostcode())
+                .addCity(request.getCity(), request.hasDistrict(), request.hasStreet())
+                .addPostalCode(request.getPostCode())
+                .addDistrict(request.getDistrict(), request.hasStreet())
+                .addStreetAndHouseNumber(request.getStreet(), request.getHouseNumber())
+                .getQuery();
+
+        finalQueryWithoutTagFilterBuilder = QueryBuilders.functionScoreQuery(query4QueryBuilder, new FunctionScoreQueryBuilder.FilterFunctionBuilder[]{
+                new FunctionScoreQueryBuilder.FilterFunctionBuilder(ScoreFunctionBuilders.linearDecayFunction("importance", "1.0", "10.6"))
+        }).scoreMode(FiltersFunctionScoreQuery.ScoreMode.SUM);
+
+        if(!request.hasHouseNumber())
+        {
+            queryBuilderForTopLevelFilter = QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(Constants.HOUSENUMBER));
+        }
+
+        osmTagFilter = new OsmTagFilter();
+        state = State.PLAIN;
+    }
+
+    public static PhotonQueryBuilder builder(StructuredPhotonRequest request, String language, String[] languages, boolean lenient) {
+        return new PhotonQueryBuilder(request, language, languages, lenient);
+    }
 
     /**
      * Create an instance of this builder which can then be embellished as needed.
@@ -196,7 +224,11 @@ public class PhotonQueryBuilder {
     public QueryBuilder buildQuery() {
         if (state.equals(State.FINISHED)) return finalQueryBuilder;
 
-        finalQueryBuilder = QueryBuilders.boolQuery().must(finalQueryWithoutTagFilterBuilder).filter(queryBuilderForTopLevelFilter);
+        finalQueryBuilder = QueryBuilders.boolQuery().must(finalQueryWithoutTagFilterBuilder);
+        if(queryBuilderForTopLevelFilter != null)
+        {
+            finalQueryBuilder.filter(queryBuilderForTopLevelFilter);
+        }
 
         BoolQueryBuilder tagFilters = osmTagFilter.getTagFiltersQuery();
         if (state.equals(State.FILTERED) && tagFilters != null) {
@@ -211,6 +243,7 @@ public class PhotonQueryBuilder {
 
         state = State.FINISHED;
 
+   //     System.out.println(finalQueryBuilder);
         return finalQueryBuilder;
     }
 }

@@ -13,6 +13,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.node.InternalSettingsPreparer;
 import org.elasticsearch.node.Node;
@@ -46,6 +47,8 @@ public class Server {
     private static final String BASE_FIELD = "document_properties";
     private static final String FIELD_VERSION = "database_version";
     private static final String FIELD_LANGUAGES = "indexed_languages";
+
+    private static final String FIELD_SUPPORT_STRUCTURED_QUERIES = "support_structured_queries";
     private static final String FIELD_IMPORT_DATE = "import_date";
 
     private Node esNode;
@@ -168,19 +171,27 @@ public class Server {
 
     }
 
-    public DatabaseProperties recreateIndex(String[] languages, Date importDate) throws IOException {
+    public DatabaseProperties recreateIndex(String[] languages, Date importDate, boolean supportStructuredQueries) throws IOException {
         deleteIndex();
 
         loadIndexSettings().createIndex(esClient, PhotonIndex.NAME);
 
-        new IndexMapping().addLanguages(languages).putMapping(esClient, PhotonIndex.NAME, PhotonIndex.TYPE);
+        createAndPutIndexMapping(languages, supportStructuredQueries);
 
         DatabaseProperties dbProperties = new DatabaseProperties()
             .setLanguages(languages)
+            .setSupportStructuredQueries(supportStructuredQueries)
             .setImportDate(importDate);
         saveToDatabase(dbProperties);
 
         return dbProperties;
+    }
+
+    private void createAndPutIndexMapping(String[] languages, boolean supportStructuredQueries)
+    {
+        new IndexMapping().addStructuredQuerySupport(supportStructuredQueries)
+                          .addLanguages(languages)
+                          .putMapping(esClient, PhotonIndex.NAME, PhotonIndex.TYPE);
     }
 
     public void updateIndexSettings(String synonymFile) throws IOException {
@@ -195,9 +206,7 @@ public class Server {
         // Sanity check: legacy databases don't save the languages, so there is no way to update
         //               the mappings consistently.
         if (dbProperties.getLanguages() != null) {
-            new IndexMapping()
-                    .addLanguages(dbProperties.getLanguages())
-                    .putMapping(esClient, PhotonIndex.NAME, PhotonIndex.TYPE);
+            this.createAndPutIndexMapping(dbProperties.getLanguages(), true); //TODO do not hardcode this!
         }
     }
 
@@ -224,6 +233,7 @@ public class Server {
         final XContentBuilder builder = XContentFactory.jsonBuilder().startObject().startObject(BASE_FIELD)
                         .field(FIELD_VERSION, DatabaseProperties.DATABASE_VERSION)
                         .field(FIELD_LANGUAGES, String.join(",", dbProperties.getLanguages()))
+                        .field(FIELD_SUPPORT_STRUCTURED_QUERIES, Boolean.toString(dbProperties.getSupportStructuredQueries()))
                         .field(FIELD_IMPORT_DATE, dbProperties.getImportDate() instanceof Date ? dbProperties.getImportDate().toInstant() : null)
                         .endObject().endObject();
 
@@ -265,6 +275,12 @@ public class Server {
 
         String importDateString = properties.get(FIELD_IMPORT_DATE);
         dbProperties.setImportDate(importDateString == null ? null : Date.from(Instant.parse(importDateString)));
+
+        String supportStructuredQueries = properties.get(FIELD_SUPPORT_STRUCTURED_QUERIES);
+        if(supportStructuredQueries != null)
+        {
+            dbProperties.setSupportStructuredQueries(Boolean.parseBoolean(supportStructuredQueries));
+        }
     }
 
     public Importer createImporter(String[] languages, String[] extraTags) {
@@ -277,6 +293,10 @@ public class Server {
 
     public SearchHandler createSearchHandler(String[] languages, int queryTimeoutSec) {
         return new ElasticsearchSearchHandler(esClient, languages, queryTimeoutSec);
+    }
+
+    public StructuredSearchHandler createStructuredSearchHandler(String[] languages, int queryTimeoutSec) {
+        return new ElasticsearchStructuredSearchHandler(esClient, languages, queryTimeoutSec);
     }
 
     public ReverseHandler createReverseHandler(int queryTimeoutSec) {

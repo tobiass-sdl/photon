@@ -16,6 +16,7 @@ public class IndexMapping {
     private static final Logger LOGGER = org.slf4j.LoggerFactory.getLogger(IndexMapping.class);
 
     private final JSONObject mappings;
+    private boolean supportStructuredQueries;
 
     /**
      * Create a new settings object and initialize it with the index settings
@@ -29,6 +30,7 @@ public class IndexMapping {
     }
 
     public void putMapping(Client client, String indexName, String indexType) {
+
         client.admin().indices().preparePutMapping(indexName)
                 .setType(indexType)
                 .setSource(mappings.toString(), XContentType.JSON)
@@ -36,11 +38,40 @@ public class IndexMapping {
                 .actionGet();
     }
 
+    public IndexMapping addStructuredQuerySupport(boolean supportStructuredQueries)
+    {
+
+        this.supportStructuredQueries = supportStructuredQueries;
+        if(!supportStructuredQueries) return this;
+
+        JSONObject placeObject = mappings.optJSONObject("place");
+        JSONObject propertiesObject = placeObject == null ? null : placeObject.optJSONObject("properties");
+
+        if(propertiesObject == null)
+        {
+            LOGGER.error("Cannot set index=true to mapping.json, please double-check the mappings.json");
+            return this;
+        }
+
+        String[] fieldsToIndex = new String[]{ "countrycode", "state", "county", "city", "postcode", "district", "housenumber", "street", "name" };
+
+        for(String fieldname : fieldsToIndex)
+        {
+            JSONObject fieldObject = propertiesObject.optJSONObject(fieldname);
+            if(!fieldObject.has("index")) {
+                fieldObject = fieldObject.getJSONObject("properties").getJSONObject("default");
+            }
+
+            fieldObject.put("index", true);
+        }
+
+        return this;
+    }
 
     public IndexMapping addLanguages(String[] languages) {
         // define collector json strings
-        String copyToCollectorString = "{\"type\":\"text\",\"index\":false,\"copy_to\":[\"collector.{lang}\"]}";
-        String nameToCollectorString = "{\"type\":\"text\",\"index\":false,\"fields\":{\"ngrams\":{\"type\":\"text\",\"analyzer\":\"index_ngram\"},\"raw\":{\"type\":\"text\",\"analyzer\":\"index_raw\",\"search_analyzer\":\"search_raw\"}},\"copy_to\":[\"collector.{lang}\"]}";
+        String copyToCollectorString = "{\"type\":\"text\",\"index\":" + this.supportStructuredQueries + ",\"copy_to\":[\"collector.{lang}\"]}";
+        String nameToCollectorString = "{\"type\":\"text\",\"index\":" + this.supportStructuredQueries + ",\"fields\":{\"ngrams\":{\"type\":\"text\",\"analyzer\":\"index_ngram\"},\"raw\":{\"type\":\"text\",\"analyzer\":\"index_raw\",\"search_analyzer\":\"search_raw\"}},\"copy_to\":[\"collector.{lang}\"]}";
         String collectorString = "{\"type\":\"text\",\"index\":false,\"fields\":{\"ngrams\":{\"type\":\"text\",\"analyzer\":\"index_ngram\"},\"raw\":{\"type\":\"text\",\"analyzer\":\"index_raw\",\"search_analyzer\":\"search_raw\"}},\"copy_to\":[\"collector.{lang}\"]}";
 
         JSONObject placeObject = mappings.optJSONObject("place");

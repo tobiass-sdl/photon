@@ -7,6 +7,7 @@ import spark.Request;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Factory that creates a {@link PhotonRequest} from a {@link Request web request}
@@ -21,11 +22,45 @@ public class PhotonRequestFactory {
     private static final HashSet<String> REQUEST_QUERY_PARAMS = new HashSet<>(Arrays.asList("lang", "q", "lon", "lat",
             "limit", "osm_tag", "location_bias_scale", "bbox", "debug", "zoom", "layer"));
 
+    private static final HashSet<String> STRUCTURED_ADDRESS_FIELDS = new HashSet<>(Arrays.asList("countrycode", "state", "county", "city",
+            "postcode", "district", "housenumber", "street"));
+    private static final HashSet<String> STRUCTURED_REQUEST_QUERY_PARAMS = new HashSet<>(Arrays.asList("lang", "limit", "zoom", "layer", "countrycode", "state", "county", "city",
+            "postcode", "district", "housenumber", "street"));
+
+
     public PhotonRequestFactory(List<String> supportedLanguages, String defaultLanguage, int maxResults) {
         this.languageResolver = new RequestLanguageResolver(supportedLanguages, defaultLanguage);
         this.bboxParamConverter = new BoundingBoxParamConverter();
         this.layerParamValidator = new LayerParamValidator();
         this.maxResults = maxResults;
+    }
+
+    public StructuredPhotonRequest createStructured(Request webRequest) throws BadRequestException {
+        boolean hasAddressQueryParam = false;
+        for (String queryParam : webRequest.queryParams()) {
+            if (!STRUCTURED_REQUEST_QUERY_PARAMS.contains(queryParam))
+                throw new BadRequestException(400, "unknown query parameter '" + queryParam + "'.  Allowed parameters are: " + STRUCTURED_REQUEST_QUERY_PARAMS);
+
+            if(STRUCTURED_ADDRESS_FIELDS.contains(queryParam)) {
+                hasAddressQueryParam = true;
+            }
+        }
+
+        if(!hasAddressQueryParam)
+            throw new BadRequestException(400, "at least one of the parameters " + STRUCTURED_ADDRESS_FIELDS + " is required.");
+
+        StructuredPhotonRequest result = new StructuredPhotonRequest(languageResolver.resolveRequestedLanguage(webRequest));
+        result.setCountryCode(webRequest.queryParams("countrycode"));
+        result.setState(webRequest.queryParams("state"));
+        result.setCounty(webRequest.queryParams("county"));
+        result.setCity(webRequest.queryParams("city"));
+        result.setPostCode(webRequest.queryParams("postcode"));
+        result.setDistrict(webRequest.queryParams("district"));
+        result.setStreet(webRequest.queryParams("street"));
+        result.setHouseNumber(webRequest.queryParams("housenumber"));
+        result.setLimit(parseInt(webRequest, "limit"));
+
+        return result;
     }
 
     public PhotonRequest create(Request webRequest) throws BadRequestException {

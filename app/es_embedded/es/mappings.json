@@ -61,7 +61,7 @@
 				}
 			},
 			"countrycode": {
-				"type": "text",
+				"type": "keyword",
 				"index": false
 			},
 			"housenumber": {
