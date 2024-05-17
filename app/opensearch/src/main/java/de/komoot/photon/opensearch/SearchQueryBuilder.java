@@ -168,7 +168,7 @@ public class SearchQueryBuilder {
                                 .field("importance")
                                 .placement(p1 -> p1
                                         .origin(JsonData.of(1.0))
-                                        .scale(JsonData.of(10.0))
+                                        .scale(JsonData.of(1.0))
                                         .decay(0.5))))
                 .scoreMode(FunctionScoreMode.Sum));
 
