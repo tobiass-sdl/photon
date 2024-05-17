@@ -97,9 +97,10 @@ public class AddressQueryBuilder {
 
             var cityQuery = GetFuzzyQuery(Constants.CITY, city).boost(CityBoost).build().toQuery();
 
+            var cityNameBoost = hasStreet ? 0.75f * CityBoost : (hasDistrict ? CityBoost : 1.25f * CityBoost);
             var cityNameQuery = GetFuzzyQuery(Constants.NAME, city)
                     .filter(QueryBuilders.term().field(Constants.OBJECT_TYPE).value(FieldValue.of("city")).build().toQuery())
-                    .boost(CityBoost)
+                    .boost(cityNameBoost)
                     .build()
                     .toQuery();
 
@@ -293,7 +294,7 @@ public class AddressQueryBuilder {
                 houseNumberQuery.filter(cityFilter.build().toQuery());
             }
 
-            query.must(houseNumberQuery.build().toQuery());
+            AddQuery(houseNumberQuery.build().toQuery());
         }
         else {
             query.should(streetQuery);
