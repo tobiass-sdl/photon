@@ -23,8 +23,9 @@ public class AddressQueryBuilder {
     private static final float CityBoost = 3.0f;
     private static final float PostalCodeBoost = 7.0f;
     private static final float DistrictBoost = 2.0f;
-    private static final float StreetBoost = 1.5f;
-    private static final float HouseNumberBoost = 0.6f;
+    private static final float StreetBoost = 5.0f;
+    private static final float HouseNumberBoost = 10.0f;
+    private static final float HouseNumberUnmatchedBoost = 0.1f;
 
     private static final float FactorForWrongLanguage = 0.1f;
 
@@ -174,18 +175,12 @@ public class AddressQueryBuilder {
         if(street == null) return this;
 
         state = State.Street;
-        BoolQueryBuilder streetQuery = null;
-        if(houseNumber != null && false)
-        {
-            streetQuery = GetFuzzyQuery(Constants.STREET, street).boost(StreetBoost);
-        }
-        else {
-            BoolQueryBuilder fieldQuery = GetFuzzyQuery(Constants.STREET, street);
-            BoolQueryBuilder nameFieldQuery = GetFuzzyQuery(Constants.NAME, street);
-            streetQuery = QueryBuilders.boolQuery().should(fieldQuery)
-                    .should(nameFieldQuery.filter(QueryBuilders.termQuery(Constants.OBJECT_TYPE, "street")))
-                    .boost(StreetBoost);
-        }
+
+        BoolQueryBuilder fieldQuery = GetFuzzyQuery(Constants.STREET, street);
+        BoolQueryBuilder nameFieldQuery = GetFuzzyQuery(Constants.NAME, street);
+        var streetQuery = QueryBuilders.boolQuery().should(fieldQuery)
+                .should(nameFieldQuery.filter(QueryBuilders.termQuery(Constants.OBJECT_TYPE, "street")))
+                .boost(StreetBoost);
 
         if(lenient) {
             streetQuery = QueryBuilders.boolQuery()
@@ -203,10 +198,9 @@ public class AddressQueryBuilder {
         if(houseNumber != null)
         {
             if(lenient) {
-                query.must(QueryBuilders.boolQuery().should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(Constants.HOUSENUMBER)))
-                        .should(QueryBuilders.matchPhraseQuery(Constants.HOUSENUMBER, houseNumber))
-                        .filter(streetQuery)
-                        .boost(HouseNumberBoost));
+                query.must(QueryBuilders.boolQuery().should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(Constants.HOUSENUMBER)).boost(HouseNumberUnmatchedBoost))
+                        .should(QueryBuilders.matchPhraseQuery(Constants.HOUSENUMBER, houseNumber).boost(HouseNumberBoost))
+                        .filter(streetQuery));
             }
             else {
                 AddQuery(QueryBuilders.boolQuery()

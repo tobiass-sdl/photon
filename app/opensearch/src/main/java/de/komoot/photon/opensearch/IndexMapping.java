@@ -7,13 +7,17 @@ import org.opensearch.client.opensearch.indices.PutMappingRequest;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class IndexMapping {
     private static final String[] ADDRESS_FIELDS = new String[]{"street", "city", "locality", "district", "county", "state", "country", "context"};
 
     private PutMappingRequest.Builder mappings;
 
-    public IndexMapping() {
+    private boolean supportStructuredQueries;
+
+    public IndexMapping(boolean supportStructuredQueries) {
+        this.supportStructuredQueries = supportStructuredQueries;
         setupBaseMappings();
     }
 
@@ -32,12 +36,12 @@ public class IndexMapping {
             for (var field: ADDRESS_FIELDS) {
                 mappings.properties(String.format("%s.%s", field, lang),
                         b -> b.text(p -> p
-                                .index(false)
+                                .index(shouldIndexAddressField(field))
                                 .copyTo("collector.base", "collector." + lang)));
             }
 
             mappings.properties("name." + lang,
-                    b -> b.text(p -> p.index(false)
+                    b -> b.text(p -> p.index(supportStructuredQueries)
                             .fields("ngrams", f -> f.text(pi -> pi.index(true).analyzer("index_ngram")))
                             .fields("raw", f2 -> f2.text(pi2 -> pi2.index(true).analyzer("index_raw")))
                             .copyTo("collector." + lang, "collector.base")));
@@ -48,7 +52,7 @@ public class IndexMapping {
 
         name_collectors.add("collector.default");
         name_collectors.add("collector.base");
-        mappings.properties("name.default", b -> b.text(p -> p.index(false).copyTo(name_collectors)));
+        mappings.properties("name.default", b -> b.text(p -> p.index(supportStructuredQueries).copyTo(name_collectors)));
 
         return this;
     }
@@ -67,7 +71,7 @@ public class IndexMapping {
         }
 
         mappings.properties("coordinate", b -> b.geoPoint(p -> p));
-        mappings.properties("countrycode", b -> b.text(p -> p.index(true)));
+        mappings.properties("countrycode", b -> b.keyword(p -> p.index(true)));
         mappings.properties("importance", b -> b.float_(p -> p.index(false)));
 
         mappings.properties("housenumber", b -> b.text(p -> p.index(true)
@@ -92,15 +96,15 @@ public class IndexMapping {
 
         for (var field : ADDRESS_FIELDS) {
             mappings.properties(field + ".default", b -> b.text(p -> p
-                    .index(false)
+                    .index(shouldIndexAddressField(field))
                     .copyTo("collector.default", "collector.base")));
         }
         mappings.properties("postcode", b -> b.text(p -> p
-                .index(false)
+                .index(supportStructuredQueries)
                 .copyTo("collector.default", "collector.base")));
 
         mappings.properties("name.default", b -> b.text(p -> p
-                .index(false)
+                .index(supportStructuredQueries)
                 .copyTo("collector.default", "collector_base")));
 
         // Collector for all name parts.
@@ -110,5 +114,9 @@ public class IndexMapping {
             mappings.properties("name." + suffix, b -> b.text(p -> p.index(false)
                     .copyTo("collector.default", "name.other", "collector.base")));
         }
+    }
+
+    private boolean shouldIndexAddressField(String field) {
+        return supportStructuredQueries && !Objects.equals(field, "locality") && !Objects.equals(field, "context");
     }
 }

@@ -106,7 +106,7 @@ public class Server {
 
         (new IndexSettingBuilder()).setShards(5).createIndex(client, PhotonIndex.NAME);
 
-        (new IndexMapping()).addLanguages(languages).putMapping(client, PhotonIndex.NAME);
+        (new IndexMapping(supportStructuredQueries)).addLanguages(languages).putMapping(client, PhotonIndex.NAME);
 
         var dbProperties = new DatabaseProperties()
                 .setLanguages(languages)
@@ -124,7 +124,7 @@ public class Server {
         (new IndexSettingBuilder()).setSynonymFile(synonymFile).updateIndex(client, PhotonIndex.NAME);
 
         if (dbProperties.getLanguages() != null) {
-            (new IndexMapping())
+            (new IndexMapping(dbProperties.getSupportStructuredQueries()))
                     .addLanguages(dbProperties.getLanguages())
                     .putMapping(client, PhotonIndex.NAME);
         }
@@ -156,6 +156,7 @@ public class Server {
 
         dbProperties.setLanguages(dbEntry.source().languages);
         dbProperties.setImportDate(dbEntry.source().importDate);
+        dbProperties.setSupportStructuredQueries(dbEntry.source().supportStructuredQueries);
     }
 
     public Importer createImporter(String[] languages, String[] extraTags) {

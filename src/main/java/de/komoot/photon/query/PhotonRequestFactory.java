@@ -58,7 +58,7 @@ public class PhotonRequestFactory {
         result.setDistrict(webRequest.queryParams("district"));
         result.setStreet(webRequest.queryParams("street"));
         result.setHouseNumber(webRequest.queryParams("housenumber"));
-        result.setLimit(parseInt(webRequest, "limit"));
+        addLimit(webRequest, result);
 
         return result;
     }
@@ -75,10 +75,7 @@ public class PhotonRequestFactory {
 
         PhotonRequest request = new PhotonRequest(query, languageResolver.resolveRequestedLanguage(webRequest));
 
-        Integer limit = parseInt(webRequest, "limit");
-        if (limit != null) {
-            request.setLimit(Integer.max(Integer.min(limit, maxResults), 1));
-        }
+        addLimit(webRequest, request);
 
         request.setLocationForBias(optionalLocationParamConverter.apply(webRequest));
         request.setBbox(bboxParamConverter.apply(webRequest));
@@ -106,6 +103,13 @@ public class PhotonRequestFactory {
         }
 
         return request;
+    }
+
+    private void addLimit(Request webRequest, PhotonRequestBase request) throws BadRequestException {
+        Integer limit = parseInt(webRequest, "limit");
+        if (limit != null) {
+            request.setLimit(Integer.max(Integer.min(limit, maxResults), 1));
+        }
     }
 
     private Integer parseInt(Request webRequest, String param) throws BadRequestException {

@@ -4,10 +4,13 @@ import de.komoot.photon.*;
 import de.komoot.photon.searcher.StructuredSearchHandler;
 import de.komoot.photon.searcher.PhotonResult;
 import de.komoot.photon.query.StructuredPhotonRequest;
+import org.opensearch.client.json.jackson.JacksonJsonpGenerator;
 import org.opensearch.client.opensearch.OpenSearchClient;
 import org.opensearch.client.opensearch._types.SearchType;
 import org.opensearch.client.opensearch._types.query_dsl.Query;
 import org.opensearch.client.opensearch.core.SearchResponse;
+import org.opensearch.client.opensearch.core.explain.ExplanationDetail;
+import org.opensearch.common.util.iterable.Iterables;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,15 +40,33 @@ public class OpenSearchStructuredSearchHandler implements StructuredSearchHandle
         var results = sendQuery(queryBuilder.buildQuery(), extLimit);
 
         if (results.hits().total().value() == 0) {
+            System.out.println("****************lenient****************");
             results = sendQuery(buildQuery(photonRequest, true).buildQuery(), extLimit);
         }
 
         List<PhotonResult> ret = new ArrayList<>();
         for (var hit : results.hits().hits()) {
+         /*   System.out.println(hit.explanation().description() + " " + hit.explanation().value());
+            for(var x : hit.explanation().details())
+            {
+                PrintExplanation(x, 1);
+            }*/
+
+            System.out.println(hit.matchedQueries());
             ret.add(hit.source().setScore(hit.score()));
         }
 
         return ret;
+    }
+
+    private void PrintExplanation(ExplanationDetail detail, int depth)
+    {
+        var offset = " ".repeat(depth);
+        System.out.println(offset + detail.description()+ " " + detail.value());
+        for(var x : detail.details())
+        {
+            PrintExplanation(x, depth + 1);
+        }
     }
 
     public SearchQueryBuilder buildQuery(StructuredPhotonRequest photonRequest, boolean lenient) {
@@ -63,7 +84,7 @@ public class OpenSearchStructuredSearchHandler implements StructuredSearchHandle
                     .searchType(SearchType.QueryThenFetch)
                     .query(query)
                     .size(limit)
-         //       setExplain(true).
+                    .explain(true)
                     .timeout(queryTimeout), OpenSearchResult.class);
         } catch (IOException e) {
             throw new RuntimeException("IO error during search", e);

@@ -3,9 +3,7 @@ package de.komoot.photon.opensearch;
 import de.komoot.photon.Constants;
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.client.opensearch._types.FieldValue;
-import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
-import org.opensearch.client.opensearch._types.query_dsl.QueryBuilders;
-import org.opensearch.client.opensearch._types.query_dsl.Query;
+import org.opensearch.client.opensearch._types.query_dsl.*;
 import org.opensearch.common.unit.Fuzziness;
 import org.opensearch.index.query.BoolQueryBuilder;
 
@@ -24,9 +22,9 @@ public class AddressQueryBuilder {
     private static final float CityBoost = 3.0f;
     private static final float PostalCodeBoost = 7.0f;
     private static final float DistrictBoost = 2.0f;
-    private static final float StreetBoost = 1.5f;
-    private static final float HouseNumberBoost = 0.6f;
-
+    private static final float StreetBoost = 5.0f; // we filter streets in the wrong city / district / ... so we can use a high boost value
+    private static final float HouseNumberBoost = 10.0f;
+    private static final float HouseNumberUnmatchedBoost = 5f;
     private static final float FactorForWrongLanguage = 0.1f;
 
     private final String[] languages;
@@ -49,18 +47,11 @@ public class AddressQueryBuilder {
 
     public Query getQuery()
     {
-        if(lenient)
-        {
-            var intermediateQuery = query.build();
-            var clauses = intermediateQuery.should();
-            var minShouldMatch = Math.max(intermediateQuery.must().isEmpty() ? 1 : 0, Math.min(3 * clauses.size() / 5, clauses.size() - 1));
-            query.minimumShouldMatch(Integer.toString(minShouldMatch));
+        if(lenient) {
+            query.minimumShouldMatch("10%");
+        }
 
-            return query.build().toQuery();
-        }
-        else {
-            return query.build().toQuery();
-        }
+        return query.build().toQuery();
     }
 
     public AddressQueryBuilder addCountryCode(String countryCode)
@@ -213,21 +204,20 @@ public class AddressQueryBuilder {
         if(street == null) return this;
 
         state = State.Street;
-        BoolQuery.Builder streetQueryBuilder = null;
-        if(houseNumber != null && false)
-        {
-            streetQueryBuilder = GetFuzzyQuery(Constants.STREET, street).boost(StreetBoost);
-        }
-        else {
-            var fieldQuery = GetFuzzyQuery(Constants.STREET, street);
-            var nameFieldQuery = GetFuzzyQuery(Constants.NAME, street);
-            streetQueryBuilder = QueryBuilders.bool().should(fieldQuery.build().toQuery())
-                    .should(nameFieldQuery.filter(QueryBuilders.term().field(Constants.OBJECT_TYPE).value(FieldValue.of("street")).build().toQuery())
-                            .build().toQuery())
-                    .boost(StreetBoost);
+
+        var fieldQuery = GetFuzzyQuery(Constants.STREET, street).queryName("street_field");
+        var isStreetQuery = QueryBuilders.term().field(Constants.OBJECT_TYPE).value(FieldValue.of("street")).queryName("is_street").build().toQuery();
+
+        var streetQueryBuilder = QueryBuilders.bool()
+                .should(fieldQuery.build().toQuery())
+                .boost(StreetBoost);
+
+        if(houseNumber == null || lenient) {
+            var nameFieldQuery = GetFuzzyQuery(Constants.NAME, street).queryName("street_name").filter(isStreetQuery);
+            streetQueryBuilder.should(nameFieldQuery.build().toQuery());
         }
 
-        if(lenient) {
+  /*      if(lenient) {
             streetQueryBuilder = QueryBuilders.bool()
                     .should(streetQueryBuilder.build().toQuery())
                     .should(QueryBuilders.bool()
@@ -237,49 +227,76 @@ public class AddressQueryBuilder {
                                     .build().toQuery())
                             .build()
                             .toQuery());
-        }
+        }*/
 
         if(lenient && cityFilter != null)
         {
-            streetQueryBuilder.filter(cityFilter.build().toQuery());
+      //      streetQueryBuilder.filter(cityFilter.build().toQuery());
         }
 
-        var streetQuery = streetQueryBuilder.build().toQuery();
-        query.should(streetQuery);
+        var streetQuery = streetQueryBuilder.queryName("street").build().toQuery();
 
         if(houseNumber != null)
         {
+            BoolQuery.Builder houseNumberQuery;
             if(lenient) {
-                query.must(QueryBuilders.bool()
+                // either match the street or no street
+                query.filter(QueryBuilders.bool()
+                        .should(streetQuery)
                         .should(QueryBuilders.bool()
                                 .mustNot(QueryBuilders.exists()
-                                        .field(Constants.HOUSENUMBER)
-                                        .build()
-                                        .toQuery())
+                                        .field(Constants.STREET + ".default")
+                                        .queryName("has_street_mismatch")
+                                        .build().toQuery())
+                                .mustNot(isStreetQuery)
+                                .build()
+                                .toQuery())
+                        .build().toQuery());
+
+                var hasHouseNumber = QueryBuilders.exists()
+                            .field(Constants.HOUSENUMBER)
+                            .build()
+                            .toQuery();
+
+              //  query.should(QueryBuilders.constantScore().filter(streetQuery).boost(StreetBoost).build().toQuery());
+                query.should(QueryBuilders.bool()
+                        .must(streetQuery)
+                        .mustNot(hasHouseNumber)
+                        .boost(0.1f)
+                        .build().toQuery());
+
+                houseNumberQuery = QueryBuilders.bool()
+                        .should(QueryBuilders.bool()
+                                .mustNot(QueryBuilders.bool().mustNot(hasHouseNumber).build().toQuery())
+                                .boost(HouseNumberUnmatchedBoost)
                                 .build()
                                 .toQuery())
                         .should(QueryBuilders.matchPhrase()
                                 .field(Constants.HOUSENUMBER)
                                 .query(houseNumber)
+                                .boost(HouseNumberBoost)
                                 .build()
-                                .toQuery())
-                        .filter(streetQuery)
-                        .boost(HouseNumberBoost)
-                        .build()
-                        .toQuery());
+                                .toQuery());
             }
             else {
-                AddQuery(QueryBuilders.bool()
+                houseNumberQuery = QueryBuilders.bool()
                         .must(QueryBuilders.matchPhrase()
                                 .field(Constants.HOUSENUMBER)
                                 .query(houseNumber)
                                 .build()
                                 .toQuery())
-                        .filter(streetQuery)
-                        .boost(HouseNumberBoost)
-                        .build()
-                        .toQuery());
+                        .boost(HouseNumberBoost);
             }
+
+            houseNumberQuery.filter(streetQuery);
+            if(cityFilter != null) {
+                houseNumberQuery.filter(cityFilter.build().toQuery());
+            }
+
+            query.must(houseNumberQuery.build().toQuery());
+        }
+        else {
+            query.should(streetQuery);
         }
 
         return this;
@@ -294,24 +311,27 @@ public class AddressQueryBuilder {
     {
         var or = QueryBuilders.bool();
 
-        or.should(QueryBuilders.matchPhrase().field(name + ".default").query(value).boost(FactorForWrongLanguage).build().toQuery());
+        or.should(QueryBuilders.matchPhrase().field(name + ".default").query(value).boost(FactorForWrongLanguage).queryName(name + "_default_" + value).build().toQuery());
         for(String lang : languages)
         {
             float boost = lang.equals(language) ? 1.0f : FactorForWrongLanguage;
-            or = or.should(QueryBuilders.matchPhrase().field(name + '.' + lang).query(value).boost(boost).build().toQuery());
+            or.should(QueryBuilders.matchPhrase().field(name + '.' + lang)
+                    .query(value).queryName(name + "_" + lang + "_" + value)
+                    .boost(boost).build().toQuery());
         }
 
+        or.minimumShouldMatch("1");
         return or;
     }
 
     private void AddFuzzyQuery(String name, String value, float boost)
     {
-        var fuzzyQuery = GetFuzzyQuery(name, value).boost(boost);
+        var fuzzyQuery = GetFuzzyQuery(name, value).boost(boost).build().toQuery();
         if(isCityRelatedField(name)){
-            addToCityFilter(fuzzyQuery.build().toQuery());
+            addToCityFilter(fuzzyQuery);
         }
 
-        AddQuery(fuzzyQuery.build().toQuery());
+        AddQuery(fuzzyQuery);
     }
 
     private static boolean isCityRelatedField(String name)
