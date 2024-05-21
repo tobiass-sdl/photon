@@ -157,10 +157,6 @@ public class SearchQueryBuilder {
                 .addStreetAndHouseNumber(request.getStreet(), request.getHouseNumber())
                 .getQuery();
 
-     //   finalQueryWithoutTagFilterBuilder = QueryBuilders.functionScore()query4QueryBuilder, new FunctionScoreQuery.Builder.FilterFunctionBuilder[]{
-     //           new FunctionScoreQuery.Builder.FilterFunctionBuilder(ScoreFunctionBuilders.linearDecayFunction("importance", "1.0", "10.6"))
-     //   }).scoreMode(FunctionScoreMode.Sum);
-
         finalQueryWithoutTagFilterBuilder = new Query.Builder().functionScore(fs -> fs
                 .query(query4QueryBuilder)
                 .functions(fn1 -> fn1

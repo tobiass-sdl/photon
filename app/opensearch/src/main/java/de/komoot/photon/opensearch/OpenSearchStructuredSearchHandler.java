@@ -40,35 +40,16 @@ public class OpenSearchStructuredSearchHandler implements StructuredSearchHandle
         var results = sendQuery(queryBuilder.buildQuery(), extLimit);
 
         if (results.hits().total().value() == 0) {
-            System.out.println("****************lenient****************");
             results = sendQuery(buildQuery(photonRequest, true).buildQuery(), extLimit);
         }
 
         List<PhotonResult> ret = new ArrayList<>();
         for (var hit : results.hits().hits()) {
-         /*   System.out.println(hit.explanation().description() + " " + hit.explanation().value());
-            for(var x : hit.explanation().details())
-            {
-                PrintExplanation(x, 1);
-            }*/
-
-            System.out.println(hit.matchedQueries());
             ret.add(hit.source().setScore(hit.score()));
         }
 
         return ret;
     }
-
-    private void PrintExplanation(ExplanationDetail detail, int depth)
-    {
-        var offset = " ".repeat(depth);
-        System.out.println(offset + detail.description()+ " " + detail.value());
-        for(var x : detail.details())
-        {
-            PrintExplanation(x, depth + 1);
-        }
-    }
-
     public SearchQueryBuilder buildQuery(StructuredPhotonRequest photonRequest, boolean lenient) {
         return new SearchQueryBuilder(photonRequest, photonRequest.getLanguage(), supportedLanguages, lenient).
                 withOsmTagFilters(photonRequest.getOsmTagFilters()).
@@ -84,7 +65,6 @@ public class OpenSearchStructuredSearchHandler implements StructuredSearchHandle
                     .searchType(SearchType.QueryThenFetch)
                     .query(query)
                     .size(limit)
-                    .explain(true)
                     .timeout(queryTimeout), OpenSearchResult.class);
         } catch (IOException e) {
             throw new RuntimeException("IO error during search", e);
