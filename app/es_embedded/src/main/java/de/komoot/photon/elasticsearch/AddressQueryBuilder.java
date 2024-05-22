@@ -12,21 +12,14 @@ import java.util.List;
 import java.util.Objects;
 
 public class AddressQueryBuilder {
-
-    private enum State {
-        City,
-        Street
-    }
-
     private static final float StateBoost = 0.1f; // state is unreliable - some locations have e.g. "NY", some "New York".
     private static final float CountyBoost = 4.0f;
     private static final float CityBoost = 3.0f;
     private static final float PostalCodeBoost = 7.0f;
     private static final float DistrictBoost = 2.0f;
-    private static final float StreetBoost = 5.0f;
+    private static final float StreetBoost = 5.0f; // we filter streets in the wrong city / district / ... so we can use a high boost value
     private static final float HouseNumberBoost = 10.0f;
-    private static final float HouseNumberUnmatchedBoost = 0.1f;
-
+    private static final float HouseNumberUnmatchedBoost = 5f;
     private static final float FactorForWrongLanguage = 0.1f;
 
     private final String[] languages;
@@ -34,62 +27,47 @@ public class AddressQueryBuilder {
 
     private BoolQueryBuilder query = QueryBuilders.boolQuery();
 
-    private BoolQueryBuilder cityFilter = QueryBuilders.boolQuery();
+    private BoolQueryBuilder cityFilter;
 
     private boolean lenient;
 
-    private State state = State.City;
-
-    public AddressQueryBuilder(boolean lenient, String language, String[] languages)
-    {
+    public AddressQueryBuilder(boolean lenient, String language, String[] languages) {
         this.lenient = lenient;
         this.language = language;
         this.languages = languages;
     }
 
-    public QueryBuilder getQuery()
-    {
-        if(lenient)
-        {
-            List<QueryBuilder> clauses = query.should();
-            query.minimumShouldMatch(Math.max(query.must().isEmpty() ? 1 : 0, Math.min(3 * clauses.size() / 5, clauses.size() - 1)));
+    public QueryBuilder getQuery() {
+        if(lenient) {
+            query.minimumShouldMatch("10%");
+        }
 
-            return query;
-        }
-        else {
-            return query;
-        }
+        return query;
     }
 
-    public AddressQueryBuilder addCountryCode(String countryCode)
-    {
+    public AddressQueryBuilder addCountryCode(String countryCode) {
         if(countryCode == null) return this;
 
-        query.must(QueryBuilders.termQuery(Constants.COUNTRYCODE, countryCode.toUpperCase()));
+        query.filter(QueryBuilders.termQuery(Constants.COUNTRYCODE, countryCode.toUpperCase()));
         return this;
     }
 
-    public AddressQueryBuilder addState(String state, boolean hasMoreDetails)
-    {
+    public AddressQueryBuilder addState(String state, boolean hasMoreDetails) {
         if(state == null) return this;
 
-        QueryBuilder stateQuery = GetNameOrFieldQuery(Constants.STATE, state, StateBoost, "state", hasMoreDetails);
-        query.should(stateQuery); // state information is unreliable - NY vs New York etc.
+        var stateQuery = GetNameOrFieldQuery(Constants.STATE, state, StateBoost, "state", hasMoreDetails);
+        query.should(stateQuery);
         return this;
     }
 
-    public AddressQueryBuilder addCounty(String county, boolean hasMoreDetails)
-    {
+    public AddressQueryBuilder addCounty(String county, boolean hasMoreDetails) {
         if(county == null) return this;
 
         AddNameOrFieldQuery(Constants.COUNTY, county, CountyBoost, "county", hasMoreDetails);
         return this;
     }
 
-    public AddressQueryBuilder addCity(String city, boolean hasDistrict, boolean hasStreet)
-    {
-        VerifyCityState();
-
+    public AddressQueryBuilder addCity(String city, boolean hasDistrict, boolean hasStreet) {
         if(city == null) return this;
 
         boolean shouldMatchCityEntry = !hasStreet || lenient;
@@ -100,9 +78,12 @@ public class AddressQueryBuilder {
         else {
             BoolQueryBuilder combinedQuery;
 
-            QueryBuilder cityQuery = GetFuzzyQuery(Constants.CITY, city).boost(CityBoost);
+            var cityQuery = GetFuzzyQuery(Constants.CITY, city).boost(CityBoost);
 
-            BoolQueryBuilder cityNameQuery = GetFuzzyQuery(Constants.NAME, city).filter(QueryBuilders.termQuery(Constants.OBJECT_TYPE, "city")).boost(CityBoost);
+            var cityNameBoost = hasStreet ? 0.75f * CityBoost : (hasDistrict ? CityBoost : 1.25f * CityBoost);
+            var cityNameQuery = GetFuzzyQuery(Constants.NAME, city)
+                    .filter(QueryBuilders.termQuery(Constants.OBJECT_TYPE,"city"))
+                    .boost(cityNameBoost);
 
             if(hasDistrict) {
                 combinedQuery = QueryBuilders.boolQuery()
@@ -110,15 +91,16 @@ public class AddressQueryBuilder {
                         .should(cityNameQuery);
             }
             else {
-                QueryBuilder notCityFilter = QueryBuilders.boolQuery().mustNot(cityQuery);
-                QueryBuilder districtQuery = GetFuzzyQuery(Constants.DISTRICT, city)
+                var notCityFilter = QueryBuilders.boolQuery().mustNot(cityQuery);
+                var districtQuery = GetFuzzyQuery(Constants.DISTRICT, city)
                         .boost(0.95f * CityBoost)
                         .filter(notCityFilter);
 
 
                 if(shouldMatchCityEntry) {
-                    BoolQueryBuilder districtNameQuery = GetFuzzyQuery(Constants.NAME, city).filter(QueryBuilders.termQuery(Constants.OBJECT_TYPE, "district")
-                                    .boost(0.99f * CityBoost))
+                    var districtNameQuery = GetFuzzyQuery(Constants.NAME, city)
+                            .filter(QueryBuilders.termQuery(Constants.OBJECT_TYPE, "district"))
+                            .boost(0.99f * CityBoost)
                             .filter(notCityFilter);
                     combinedQuery = QueryBuilders.boolQuery()
                             .should(cityQuery)
@@ -131,150 +113,173 @@ public class AddressQueryBuilder {
                 }
             }
 
-            cityFilter.should(combinedQuery);
+            addToCityFilter(combinedQuery);
             AddQuery(combinedQuery);
         }
 
         return this;
     }
 
-    public AddressQueryBuilder addPostalCode(String postalCode)
-    {
-        VerifyCityState();
+    private void addToCityFilter(QueryBuilder query) {
+        if(cityFilter == null)
+        {
+            cityFilter = QueryBuilders.boolQuery();
+        }
 
+        cityFilter.should(query);
+    }
+
+    public AddressQueryBuilder addPostalCode(String postalCode) {
         if(postalCode == null) return this;
 
         Fuzziness fuzziness = lenient ? Fuzziness.AUTO : Fuzziness.ZERO;
 
         QueryBuilder query;
         if(StringUtils.containsWhitespace(postalCode)) {
-            query = QueryBuilders.matchQuery(Constants.POSTCODE, postalCode).fuzziness(fuzziness).boost(PostalCodeBoost);
+            query = QueryBuilders.matchQuery(Constants.POSTCODE, postalCode)
+                    .fuzziness(fuzziness.asString())
+                    .boost(PostalCodeBoost);
         }
         else {
-            query = QueryBuilders.fuzzyQuery(Constants.POSTCODE, postalCode).fuzziness(fuzziness).boost(PostalCodeBoost);
+            query = QueryBuilders.fuzzyQuery(Constants.POSTCODE, postalCode)
+                    .fuzziness(fuzziness)
+                    .boost(PostalCodeBoost);
         }
 
-        cityFilter.should(query);
+        addToCityFilter(query);
         AddQuery(query);
 
         return this;
     }
 
-    public AddressQueryBuilder addDistrict(String district, boolean hasMoreDetails)
-    {
-        VerifyCityState();
-
+    public AddressQueryBuilder addDistrict(String district, boolean hasMoreDetails) {
         if(district == null) return this;
 
         AddNameOrFieldQuery(Constants.DISTRICT, district, DistrictBoost, "district", hasMoreDetails);
         return this;
     }
 
-    public AddressQueryBuilder addStreetAndHouseNumber(String street, String houseNumber)
-    {
+    public AddressQueryBuilder addStreetAndHouseNumber(String street, String houseNumber) {
         if(street == null) return this;
 
-        state = State.Street;
+        var fieldQuery = GetFuzzyQuery(Constants.STREET, street);
+        var isStreetQuery = QueryBuilders.termQuery(Constants.OBJECT_TYPE, "street");
 
-        BoolQueryBuilder fieldQuery = GetFuzzyQuery(Constants.STREET, street);
-        BoolQueryBuilder nameFieldQuery = GetFuzzyQuery(Constants.NAME, street);
-        var streetQuery = QueryBuilders.boolQuery().should(fieldQuery)
-                .should(nameFieldQuery.filter(QueryBuilders.termQuery(Constants.OBJECT_TYPE, "street")))
-                .boost(StreetBoost);
+        BoolQueryBuilder streetQueryBuilder;
 
-        if(lenient) {
-            streetQuery = QueryBuilders.boolQuery()
-                    .should(streetQuery)
-                    .should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(Constants.STREET).boost(StreetBoost * 0.5f)));
+        if(houseNumber == null || lenient) {
+            var nameFieldQuery = GetFuzzyQuery(Constants.NAME, street).filter(isStreetQuery);
+            streetQueryBuilder = QueryBuilders.boolQuery()
+                                        .should(fieldQuery)
+                                        .should(nameFieldQuery);
+        }
+        else {
+            streetQueryBuilder = fieldQuery;
         }
 
-        if(lenient && cityFilter.hasClauses())
-        {
-            streetQuery = streetQuery.filter(cityFilter);
-        }
-
-        query.should(streetQuery);
+        streetQueryBuilder.boost(StreetBoost);
 
         if(houseNumber != null)
         {
+            BoolQueryBuilder houseNumberQuery;
             if(lenient) {
-                query.must(QueryBuilders.boolQuery().should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(Constants.HOUSENUMBER)).boost(HouseNumberUnmatchedBoost))
-                        .should(QueryBuilders.matchPhraseQuery(Constants.HOUSENUMBER, houseNumber).boost(HouseNumberBoost))
-                        .filter(streetQuery));
+                // either match the street or no street
+                query.filter(QueryBuilders.boolQuery()
+                        .should(streetQueryBuilder)
+                        .should(QueryBuilders.boolQuery()
+                                .mustNot(QueryBuilders.existsQuery(Constants.STREET + ".default"))
+                                .mustNot(isStreetQuery)));
+
+                var hasHouseNumber = QueryBuilders.existsQuery(Constants.HOUSENUMBER);
+
+                query.should(QueryBuilders.boolQuery()
+                        .must(streetQueryBuilder)
+                        .mustNot(hasHouseNumber)
+                        .boost(0.5f));
+
+                houseNumberQuery = QueryBuilders.boolQuery()
+                        .should(QueryBuilders.boolQuery()
+                                .mustNot(hasHouseNumber)
+                                .boost(HouseNumberUnmatchedBoost))
+                        .should(QueryBuilders.matchPhraseQuery(Constants.HOUSENUMBER, houseNumber)
+                                .boost(HouseNumberBoost));
             }
             else {
-                AddQuery(QueryBuilders.boolQuery()
+                houseNumberQuery = QueryBuilders.boolQuery()
                         .must(QueryBuilders.matchPhraseQuery(Constants.HOUSENUMBER, houseNumber))
-                        .filter(streetQuery)
-                        .boost(HouseNumberBoost));
+                        .boost(HouseNumberBoost);
             }
+
+            houseNumberQuery.filter(streetQueryBuilder);
+            if(cityFilter != null) {
+                houseNumberQuery.filter(cityFilter);
+            }
+
+            AddQuery(houseNumberQuery);
+        }
+        else {
+            query.should(streetQueryBuilder);
         }
 
         return this;
     }
 
-    private void VerifyCityState()
-    {
-        if(state == State.Street) throw new UnsupportedOperationException("can't add city related values after street was set");
-    }
-
     private BoolQueryBuilder GetFuzzyQuery(String name, String value)
     {
-        BoolQueryBuilder or = QueryBuilders.boolQuery();
+        var or = QueryBuilders.boolQuery();
 
-        or.should(QueryBuilders.matchPhraseQuery(name + ".default", value).boost(FactorForWrongLanguage));
+        or.should(QueryBuilders.matchPhraseQuery(name + ".default", value)
+                .boost(FactorForWrongLanguage));
         for(String lang : languages)
         {
             float boost = lang.equals(language) ? 1.0f : FactorForWrongLanguage;
-            or = or.should(QueryBuilders.matchPhraseQuery(name + '.' + lang, value).boost(boost));
+            or.should(QueryBuilders.matchPhraseQuery(name + '.' + lang, value)
+                    .boost(boost));
         }
 
+        or.minimumShouldMatch("1");
         return or;
     }
 
-    private void AddFuzzyQuery(String name, String value, float boost)
-    {
-        QueryBuilder fuzzyQuery = GetFuzzyQuery(name, value).boost(boost);
+    private void AddFuzzyQuery(String name, String value, float boost) {
+        var fuzzyQuery = GetFuzzyQuery(name, value).boost(boost);
         if(isCityRelatedField(name)){
-            cityFilter.should(fuzzyQuery);
+            addToCityFilter(fuzzyQuery);
         }
 
         AddQuery(fuzzyQuery);
     }
 
-    private static boolean isCityRelatedField(String name)
-    {
+    private static boolean isCityRelatedField(String name) {
         return Objects.equals(name, Constants.POSTCODE) || Objects.equals(name, Constants.CITY) || Objects.equals(name, Constants.DISTRICT);
     }
 
     private void AddNameOrFieldQuery(String field, String value, float boost, String objectType, boolean hasMoreDetails) {
-        QueryBuilder query = GetNameOrFieldQuery(field, value, boost, objectType, hasMoreDetails);
-        if(isCityRelatedField(field))
-        {
-            cityFilter.should(query);
+        var query = GetNameOrFieldQuery(field, value, boost, objectType, hasMoreDetails);
+        if(isCityRelatedField(field)) {
+            addToCityFilter(query);
         }
 
         AddQuery(query);
     }
 
-    private QueryBuilder GetNameOrFieldQuery(String field, String value, float boost, String objectType, boolean hasMoreDetails)
-    {
+    private BoolQueryBuilder GetNameOrFieldQuery(String field, String value, float boost, String objectType, boolean hasMoreDetails) {
         if(hasMoreDetails && !lenient)
         {
             return GetFuzzyQuery(field, value).boost(boost);
         }
         else {
-            QueryBuilder fieldQuery = GetFuzzyQuery(field, value);
-            BoolQueryBuilder nameFieldQuery = GetFuzzyQuery(Constants.NAME, value);
-            return QueryBuilders.boolQuery().should(fieldQuery)
+            var fieldQuery = GetFuzzyQuery(field, value);
+            var nameFieldQuery = GetFuzzyQuery(Constants.NAME, value);
+            return QueryBuilders.boolQuery()
+                    .should(fieldQuery)
                     .should(nameFieldQuery.filter(QueryBuilders.termQuery(Constants.OBJECT_TYPE, objectType)))
                     .boost(boost);
         }
     }
 
     private void AddQuery(QueryBuilder clause) {
-        if(lenient)
-        {
+        if(lenient) {
             query.should(clause);
         }
         else {

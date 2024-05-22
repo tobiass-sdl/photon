@@ -1,6 +1,8 @@
 package de.komoot.photon.elasticsearch;
 
 
+import de.komoot.photon.Constants;
+import de.komoot.photon.query.StructuredPhotonRequest;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Point;
 import de.komoot.photon.searcher.TagFilter;
@@ -142,7 +144,7 @@ public class PhotonQueryBuilder {
                 .getQuery();
 
         finalQueryWithoutTagFilterBuilder = QueryBuilders.functionScoreQuery(query4QueryBuilder, new FunctionScoreQueryBuilder.FilterFunctionBuilder[]{
-                new FunctionScoreQueryBuilder.FilterFunctionBuilder(ScoreFunctionBuilders.linearDecayFunction("importance", "1.0", "10.6"))
+                new FunctionScoreQueryBuilder.FilterFunctionBuilder(ScoreFunctionBuilders.linearDecayFunction("importance", "1.0", "1.0"))
         }).scoreMode(FiltersFunctionScoreQuery.ScoreMode.SUM);
 
         if(!request.hasHouseNumber())
@@ -243,7 +245,6 @@ public class PhotonQueryBuilder {
 
         state = State.FINISHED;
 
-   //     System.out.println(finalQueryBuilder);
         return finalQueryBuilder;
     }
 }

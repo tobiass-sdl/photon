@@ -11,12 +11,6 @@ import java.util.List;
 import java.util.Objects;
 
 public class AddressQueryBuilder {
-
-    private enum State {
-        City,
-        Street
-    }
-
     private static final float StateBoost = 0.1f; // state is unreliable - some locations have e.g. "NY", some "New York".
     private static final float CountyBoost = 4.0f;
     private static final float CityBoost = 3.0f;
@@ -36,17 +30,13 @@ public class AddressQueryBuilder {
 
     private boolean lenient;
 
-    private State state = State.City;
-
-    public AddressQueryBuilder(boolean lenient, String language, String[] languages)
-    {
+    public AddressQueryBuilder(boolean lenient, String language, String[] languages) {
         this.lenient = lenient;
         this.language = language;
         this.languages = languages;
     }
 
-    public Query getQuery()
-    {
+    public Query getQuery() {
         if(lenient) {
             query.minimumShouldMatch("10%");
         }
@@ -54,16 +44,14 @@ public class AddressQueryBuilder {
         return query.build().toQuery();
     }
 
-    public AddressQueryBuilder addCountryCode(String countryCode)
-    {
+    public AddressQueryBuilder addCountryCode(String countryCode) {
         if(countryCode == null) return this;
 
         query.filter(QueryBuilders.term().field(Constants.COUNTRYCODE).value(FieldValue.of(countryCode.toUpperCase())).build().toQuery());
         return this;
     }
 
-    public AddressQueryBuilder addState(String state, boolean hasMoreDetails)
-    {
+    public AddressQueryBuilder addState(String state, boolean hasMoreDetails) {
         if(state == null) return this;
 
         var stateQuery = GetNameOrFieldQuery(Constants.STATE, state, StateBoost, "state", hasMoreDetails)
@@ -73,18 +61,14 @@ public class AddressQueryBuilder {
         return this;
     }
 
-    public AddressQueryBuilder addCounty(String county, boolean hasMoreDetails)
-    {
+    public AddressQueryBuilder addCounty(String county, boolean hasMoreDetails) {
         if(county == null) return this;
 
         AddNameOrFieldQuery(Constants.COUNTY, county, CountyBoost, "county", hasMoreDetails);
         return this;
     }
 
-    public AddressQueryBuilder addCity(String city, boolean hasDistrict, boolean hasStreet)
-    {
-        VerifyCityState();
-
+    public AddressQueryBuilder addCity(String city, boolean hasDistrict, boolean hasStreet) {
         if(city == null) return this;
 
         boolean shouldMatchCityEntry = !hasStreet || lenient;
@@ -121,10 +105,10 @@ public class AddressQueryBuilder {
                 if(shouldMatchCityEntry) {
                     var districtNameQuery = GetFuzzyQuery(Constants.NAME, city)
                             .filter(QueryBuilders.term().field(Constants.OBJECT_TYPE).value(FieldValue.of("district"))
-                                    .boost(0.99f * CityBoost)
                                     .build()
                                     .toQuery())
                             .filter(notCityFilter)
+                            .boost(0.99f * CityBoost)
                             .build()
                             .toQuery();
                     combinedQueryBuilder = QueryBuilders.bool()
@@ -146,8 +130,7 @@ public class AddressQueryBuilder {
         return this;
     }
 
-    private void addToCityFilter(Query query)
-    {
+    private void addToCityFilter(Query query) {
         if(cityFilter == null)
         {
             cityFilter = QueryBuilders.bool();
@@ -156,10 +139,7 @@ public class AddressQueryBuilder {
         cityFilter.should(query);
     }
 
-    public AddressQueryBuilder addPostalCode(String postalCode)
-    {
-        VerifyCityState();
-
+    public AddressQueryBuilder addPostalCode(String postalCode) {
         if(postalCode == null) return this;
 
         Fuzziness fuzziness = lenient ? Fuzziness.AUTO : Fuzziness.ZERO;
@@ -190,35 +170,32 @@ public class AddressQueryBuilder {
         return this;
     }
 
-    public AddressQueryBuilder addDistrict(String district, boolean hasMoreDetails)
-    {
-        VerifyCityState();
-
+    public AddressQueryBuilder addDistrict(String district, boolean hasMoreDetails) {
         if(district == null) return this;
 
         AddNameOrFieldQuery(Constants.DISTRICT, district, DistrictBoost, "district", hasMoreDetails);
         return this;
     }
 
-    public AddressQueryBuilder addStreetAndHouseNumber(String street, String houseNumber)
-    {
+    public AddressQueryBuilder addStreetAndHouseNumber(String street, String houseNumber) {
         if(street == null) return this;
-
-        state = State.Street;
 
         var fieldQuery = GetFuzzyQuery(Constants.STREET, street);
         var isStreetQuery = QueryBuilders.term().field(Constants.OBJECT_TYPE).value(FieldValue.of("street")).build().toQuery();
 
-        var streetQueryBuilder = QueryBuilders.bool()
-                .should(fieldQuery.build().toQuery())
-                .boost(StreetBoost);
+        BoolQuery.Builder streetQueryBuilder;
 
         if(houseNumber == null || lenient) {
             var nameFieldQuery = GetFuzzyQuery(Constants.NAME, street).filter(isStreetQuery);
-            streetQueryBuilder.should(nameFieldQuery.build().toQuery());
+            streetQueryBuilder = QueryBuilders.bool()
+                    .should(fieldQuery.build().toQuery())
+                    .should(nameFieldQuery.build().toQuery());
+        }
+        else {
+            streetQueryBuilder = fieldQuery;
         }
 
-        var streetQuery = streetQueryBuilder.build().toQuery();
+        var streetQuery = streetQueryBuilder.boost(StreetBoost).build().toQuery();
 
         if(houseNumber != null)
         {
@@ -244,7 +221,7 @@ public class AddressQueryBuilder {
                 query.should(QueryBuilders.bool()
                         .must(streetQuery)
                         .mustNot(hasHouseNumber)
-                        .boost(0.1f)
+                        .boost(0.5f)
                         .build().toQuery());
 
                 houseNumberQuery = QueryBuilders.bool()
@@ -284,11 +261,6 @@ public class AddressQueryBuilder {
         return this;
     }
 
-    private void VerifyCityState()
-    {
-        if(state == State.Street) throw new UnsupportedOperationException("can't add city related values after street was set");
-    }
-
     private BoolQuery.Builder GetFuzzyQuery(String name, String value)
     {
         var or = QueryBuilders.bool();
@@ -314,8 +286,7 @@ public class AddressQueryBuilder {
         return or;
     }
 
-    private void AddFuzzyQuery(String name, String value, float boost)
-    {
+    private void AddFuzzyQuery(String name, String value, float boost) {
         var fuzzyQuery = GetFuzzyQuery(name, value).boost(boost).build().toQuery();
         if(isCityRelatedField(name)){
             addToCityFilter(fuzzyQuery);
@@ -324,23 +295,20 @@ public class AddressQueryBuilder {
         AddQuery(fuzzyQuery);
     }
 
-    private static boolean isCityRelatedField(String name)
-    {
+    private static boolean isCityRelatedField(String name) {
         return Objects.equals(name, Constants.POSTCODE) || Objects.equals(name, Constants.CITY) || Objects.equals(name, Constants.DISTRICT);
     }
 
     private void AddNameOrFieldQuery(String field, String value, float boost, String objectType, boolean hasMoreDetails) {
         var query = GetNameOrFieldQuery(field, value, boost, objectType, hasMoreDetails).build().toQuery();
-        if(isCityRelatedField(field))
-        {
+        if(isCityRelatedField(field)) {
             addToCityFilter(query);
         }
 
         AddQuery(query);
     }
 
-    private BoolQuery.Builder GetNameOrFieldQuery(String field, String value, float boost, String objectType, boolean hasMoreDetails)
-    {
+    private BoolQuery.Builder GetNameOrFieldQuery(String field, String value, float boost, String objectType, boolean hasMoreDetails) {
         if(hasMoreDetails && !lenient)
         {
             return GetFuzzyQuery(field, value).boost(boost);
@@ -362,8 +330,7 @@ public class AddressQueryBuilder {
     }
 
     private void AddQuery(Query clause) {
-        if(lenient)
-        {
+        if(lenient) {
             query.should(clause);
         }
         else {

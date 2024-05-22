@@ -3,6 +3,7 @@ package de.komoot.photon;
 import de.komoot.photon.DatabaseProperties;
 import de.komoot.photon.Importer;
 import de.komoot.photon.Updater;
+import de.komoot.photon.searcher.StructuredSearchHandler;
 import de.komoot.photon.searcher.ReverseHandler;
 import de.komoot.photon.searcher.SearchHandler;
 import de.komoot.photon.elasticsearch.*;
