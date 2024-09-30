@@ -133,24 +133,13 @@ public class AddressQueryBuilder {
 
         Fuzziness fuzziness = lenient ? Fuzziness.AUTO : Fuzziness.ZERO;
 
-        Query query;
-        if (StringUtils.containsWhitespace(postalCode)) {
-            query = QueryBuilders.match()
-                    .field(Constants.POSTCODE)
-                    .query(FieldValue.of(postalCode))
-                    .fuzziness(fuzziness.asString())
-                    .boost(POSTAL_CODE_BOOST)
-                    .build()
-                    .toQuery();
-        } else {
-            query = QueryBuilders.fuzzy()
+        Query query = QueryBuilders.fuzzy()
                     .field(Constants.POSTCODE)
                     .value(FieldValue.of(postalCode))
                     .fuzziness(fuzziness.asString())
                     .boost(POSTAL_CODE_BOOST)
                     .build()
                     .toQuery();
-        }
 
         addToCityFilter(query);
         this.query.must(query);
