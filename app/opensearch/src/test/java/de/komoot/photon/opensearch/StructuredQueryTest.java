@@ -26,6 +26,9 @@ public class StructuredQueryTest extends ESBaseTester {
     private static final String District = "MajorSuburb";
     private static final String HouseNumber = "42";
     private static final String City = "Some City";
+
+    private static final String CityWithSpecialCharacter = "Baden-Baden";
+    private static final String PostCodeWithSpecialCharacter = "00-693";
     private static final String Hamlet = "Hamlet";
     private static final String Street = "Some street";
     public static final String DistrictPostCode = "12346";
@@ -97,6 +100,13 @@ public class StructuredQueryTest extends ESBaseTester {
                 .importance(1.0)
                 .rankAddress(getRank(AddressType.HOUSE));
 
+        var withSpecialCharacter = new PhotonDoc(9, "R", 9, "place", "city")
+                .names(Collections.singletonMap("name", CityWithSpecialCharacter))
+                .countryCode(CountryCode)
+                .postcode(PostCodeWithSpecialCharacter)
+                .importance(1.0)
+                .rankAddress(getRank(AddressType.CITY));
+
         instance.add(country, 0);
         instance.add(city, 1);
         instance.add(suburb, 2);
@@ -106,8 +116,40 @@ public class StructuredQueryTest extends ESBaseTester {
         addHamletHouse(instance, 6, "2");
         addHamletHouse(instance, 7, "3");
         instance.add(busStop, 8);
+        instance.add(withSpecialCharacter, 9);
         instance.finish();
         refresh();
+    }
+
+    @Test
+    void findsByPostCodeWithSpecialCharacter() {
+        var request = new StructuredPhotonRequest(Language);
+        request.setCountryCode(CountryCode);
+        request.setPostCode(PostCodeWithSpecialCharacter);
+
+        var result = search(request);
+        Assertions.assertEquals(9, result.get(Constants.OSM_ID));
+    }
+
+    @Test
+    void doesNotFindPostCodeWithSpecialCharacterForReversedTokenSequence() {
+        var request = new StructuredPhotonRequest(Language);
+        request.setCountryCode(CountryCode);
+        request.setPostCode("693-00");
+
+        StructuredSearchHandler queryHandler = getServer().createStructuredSearchHandler(new String[]{Language}, 1);
+        var results = queryHandler.search(request);
+        Assertions.assertTrue(results.isEmpty());
+    }
+
+    @Test
+    void findsByCityWithSpecialCharacter() {
+        var request = new StructuredPhotonRequest(Language);
+        request.setCountryCode(CountryCode);
+        request.setCity(CityWithSpecialCharacter);
+
+        var result = search(request);
+        Assertions.assertEquals(9, result.get(Constants.OSM_ID));
     }
 
     @Test

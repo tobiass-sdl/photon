@@ -120,7 +120,7 @@ public class IndexMapping {
                     .index(false)
                     .copyTo(collectors)));
         }
-        mappings.properties("postcode", b -> b.text(p -> p
+        mappings.properties("postcode", b -> b.keyword(p -> p
                 .index(supportStructuredQueries)
                 .copyTo("collector.default", "collector.base")));
 
