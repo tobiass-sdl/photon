@@ -153,7 +153,7 @@ public class SearchQueryBuilder {
                 .addState(request.getState(), hasSubStateField)
                 .addCounty(request.getCounty(), request.hasCityOrPostCode() || request.hasDistrict() || request.hasStreet())
                 .addCity(request.getCity(), request.hasDistrict(), request.hasStreet(), request.hasPostCode())
-                .addPostalCode(request.getPostCode())
+                .addPostalCode(request.getPostCode(), request.getCountryCode())
                 .addDistrict(request.getDistrict(), request.hasStreet())
                 .addStreetAndHouseNumber(request.getStreet(), request.getHouseNumber())
                 .getQuery();

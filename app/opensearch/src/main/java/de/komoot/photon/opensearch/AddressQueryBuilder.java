@@ -128,23 +128,39 @@ public class AddressQueryBuilder {
         cityFilter.should(query);
     }
 
-    public AddressQueryBuilder addPostalCode(String postalCode) {
+    public AddressQueryBuilder addPostalCode(String postalCode, String iso2) {
         if (postalCode == null) return this;
 
         Fuzziness fuzziness = lenient ? Fuzziness.AUTO : Fuzziness.ZERO;
 
-        Query query = QueryBuilders.fuzzy()
-                    .field(Constants.POSTCODE)
-                    .value(FieldValue.of(postalCode))
-                    .fuzziness(fuzziness.asString())
-                    .boost(POSTAL_CODE_BOOST)
+        var normalizedPostCode = PostCodeNormalizer.normalize(iso2, postalCode);
+        Query query;
+        if(normalizedPostCode.equals(postalCode))
+        {
+            query = fuzzyPostCodeQuery(postalCode, fuzziness);
+        }
+        else {
+            query = QueryBuilders.bool()
+                    .should(fuzzyPostCodeQuery(postalCode, fuzziness))
+                    .should(fuzzyPostCodeQuery(normalizedPostCode, fuzziness))
                     .build()
                     .toQuery();
+        }
 
         addToCityFilter(query);
         this.query.must(query);
 
         return this;
+    }
+
+    private Query fuzzyPostCodeQuery(String postCode, Fuzziness fuzziness) {
+        return QueryBuilders.fuzzy()
+                .field(Constants.POSTCODE)
+                .value(FieldValue.of(postCode))
+                .fuzziness(fuzziness.asString())
+                .boost(POSTAL_CODE_BOOST)
+                .build()
+                .toQuery();
     }
 
     public AddressQueryBuilder addDistrict(String district, boolean hasMoreDetails) {
