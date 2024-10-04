@@ -90,7 +90,9 @@ public class StructuredPhotonRequest extends PhotonRequestBase {
 
     public boolean hasPostCode() { return !StringUtils.isEmpty(this.postCode); }
 
-    public boolean hasCityOrPostCode() { return !StringUtils.isEmpty(this.city) || hasPostCode(); }
+    public boolean hasCity() { return !StringUtils.isEmpty(this.city); }
+
+    public boolean hasCityOrPostCode() { return hasCity() || hasPostCode(); }
 
     public boolean hasCounty() { return !StringUtils.isEmpty(this.county); }
 

@@ -174,15 +174,30 @@ public class SearchQueryBuilder {
         var typeOtherQuery = QueryBuilders.term().field(Constants.OBJECT_TYPE).value(FieldValue.of("other")).build().toQuery();
         if (!request.hasHouseNumber())
         {
-            queryBuilderForTopLevelFilter = QueryBuilders.bool().mustNot(hasHouseNumberQuery)
-                    .mustNot(isHouseQuery)
-                    .mustNot(typeOtherQuery);
+            if (lenient && request.hasPostCode() && !request.hasCity() && !request.hasDistrict() && !request.hasStreet()) {
+                // post codes are sometimes assigned to an island, e.g. FIQQ 1ZZ to East Falkland which has type "other"
+                var islandTerms = new TermsQueryField.Builder().value(Arrays.asList(FieldValue.of("island"), FieldValue.of("archipelago"))).build();
+                var isIsland = QueryBuilders.terms().field(Constants.OSM_VALUE).terms(islandTerms).build().toQuery();
+                queryBuilderForTopLevelFilter = QueryBuilders.bool().mustNot(hasHouseNumberQuery)
+                        .mustNot(isHouseQuery)
+                        .must(QueryBuilders.bool()
+                                .should(isIsland)
+                                .should(QueryBuilders.bool().mustNot(typeOtherQuery).build().toQuery())
+                                .build()
+                                .toQuery());
+            }
+            else {
+                queryBuilderForTopLevelFilter = QueryBuilders.bool().mustNot(hasHouseNumberQuery)
+                        .mustNot(isHouseQuery)
+                        .mustNot(typeOtherQuery);
+            }
         }
         else {
             var noHouseOrHouseNumber = QueryBuilders.bool().should(hasHouseNumberQuery)
                     .should(QueryBuilders.bool().mustNot(isHouseQuery).build().toQuery())
                     .build()
                     .toQuery();
+
             queryBuilderForTopLevelFilter = QueryBuilders.bool().must(noHouseOrHouseNumber)
                     .mustNot(typeOtherQuery);
         }

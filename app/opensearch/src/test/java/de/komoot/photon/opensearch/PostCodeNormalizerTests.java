@@ -14,6 +14,12 @@ public class PostCodeNormalizerTests {
     }
 
     @Test
+    public void normalizesLatvianPostCodes() {
+        Assertions.assertEquals("LV-1010", PostCodeNormalizer.normalize("LV", "LV-1010"));
+        Assertions.assertEquals("LV-1010", PostCodeNormalizer.normalize("LV", "1010"));
+    }
+
+    @Test
     public void doesNotNormalizePostCodesWithPostfix() {
         String postCodeWithPostfix = "12345x";
         Assertions.assertEquals(postCodeWithPostfix, PostCodeNormalizer.normalize("GR", postCodeWithPostfix));
